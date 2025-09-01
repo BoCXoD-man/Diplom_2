@@ -2,6 +2,8 @@ import allure
 
 from base.user_base import UserBase
 from data import TextResponse
+import pytest
+from http import HTTPStatus
 
 
 class TestRegistration:
@@ -26,32 +28,31 @@ class TestRegistration:
         response = UserBase.register_user(new_user['user_body'])
         assert response.status_code == 403 and response.text == TextResponse.ALREADY_EXIST_USER_REG
 
-    @allure.title('Проверка ошибки 403 при регистрации с отсутствием почты')
-    def test_failed_registration_no_email_code_403(self, new_user_body):
-        """
-        Args:
-            new_user_body (dict): валидное тело пользователя для модификации
-        """
-        user_body = {'password': new_user_body['password'], 'name': new_user_body['name']}
-        response = UserBase.register_user(user_body)
-        assert response.status_code == 403 and response.text == TextResponse.INCORRECT_DATA_REG
+    
+    @allure.feature("Регистрация пользователя")
+    @pytest.mark.parametrize(
+        "missing_key, title",
+        [
+            ("email",    "Проверка ошибки 403 при регистрации с отсутствием почты"),
+            ("password", "Проверка ошибки 403 при регистрации с отсутствием пароля"),
+            ("name",     "Проверка ошибки 403 при регистрации с отсутствием имени"),
+        ],
+        ids=["no_email", "no_password", "no_name"]
+    )
+    def test_failed_registration_missing_field_code_403(self, new_user_body, missing_key, title):
+        allure.dynamic.title(title)
 
-    @allure.title('Проверка ошибки 403 при регистрации с отсутствием пароля')
-    def test_failed_registration_no_password_code_403(self, new_user_body):
-        """
-        Args:
-            new_user_body (dict): валидное тело пользователя для модификации
-        """
-        user_body = {'email': new_user_body['email'], 'name': new_user_body['name']}
-        response = UserBase.register_user(user_body)
-        assert response.status_code == 403 and response.text == TextResponse.INCORRECT_DATA_REG
+        # Формируем тело без одного обязательного поля
+        user_body = {k: v for k, v in new_user_body.items() if k != missing_key}
 
-    @allure.title('Проверка ошибки 403 при регистрации с отсутствием имени')
-    def test_failed_registration_no_name_code_403(self, new_user_body):
-        """
-        Args:
-            new_user_body (dict): валидное тело пользователя для модификации
-        """
-        user_body = {'email': new_user_body['email'], 'password': new_user_body['password']}
-        response = UserBase.register_user(user_body)
-        assert response.status_code == 403 and response.text == TextResponse.INCORRECT_DATA_REG
+        with allure.step(f"Отправить запрос на регистрацию без поля '{missing_key}'"):
+            response = UserBase.register_user(user_body)
+
+        with allure.step("Проверить, что вернулся 403 и корректный текст ошибки"):
+            assert response.status_code == HTTPStatus.FORBIDDEN, (
+                f"Ожидался статус 403 при отсутствии '{missing_key}', "
+                f"получено: {response.status_code}, body: {getattr(response, 'text', response)}"
+            )
+            assert response.text == TextResponse.INCORRECT_DATA_REG, (
+                f"Ожидался текст '{TextResponse.INCORRECT_DATA_REG}', получено: {response.text}"
+            )
